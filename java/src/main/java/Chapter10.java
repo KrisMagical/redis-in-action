@@ -69,10 +69,15 @@ public class Chapter10 {
     }
 
     public void run() throws Exception {
+        for (int db : new int[]{11, 12, 13, 14, 15}) {
+            Jedis j = new Jedis("localhost");
+            j.select(db);
+            j.flushDB();
+            j.disconnect();
+        }
+
         Jedis conn = new Jedis("localhost");
         conn.select(15);
-
-        conn.flushDB();
 
         seedRedisConfigs(conn);
 
@@ -92,24 +97,35 @@ public class Chapter10 {
     private void seedRedisConfigs(Jedis conn) {
         System.out.println("\n----- seedRedisConfigs -----");
 
-        String json = "{\"host\":\"127.0.0.1\",\"port\":6379,\"db\":15,\"timeoutMillis\":2000}";
+        String defaultJson = "{\"host\":\"127.0.0.1\",\"port\":6379,\"db\":15,\"timeoutMillis\":2000}";
+        conn.set("config:redis:default", defaultJson);
+        conn.set("config:redis:unique", defaultJson);
 
-        conn.set("config:redis:default", json);
-        conn.set("config:redis:unique", json);
-
+        int[] uniqueDbs = {13, 14};
         for (int i = 0; i < 16; i++) {
+            int db = uniqueDbs[i % uniqueDbs.length];
+            String json = String.format("{\"host\":\"127.0.0.1\",\"port\":6379,\"db\":%d,\"timeoutMillis\":2000}", db);
             conn.set("config:redis:unique:" + i, json);
         }
 
+        int[] timelineDbs = {11, 12, 13, 14};
         for (int i = 0; i < 8; i++) {
+            int db = timelineDbs[i % timelineDbs.length];
+            String json = String.format("{\"host\":\"127.0.0.1\",\"port\":6379,\"db\":%d,\"timeoutMillis\":2000}", db);
             conn.set("config:redis:timelines:" + i, json);
         }
 
+        int[] followerDbs = {11, 12, 13, 14};
         for (int i = 0; i < 16; i++) {
+            int db = followerDbs[i % followerDbs.length];
+            String json = String.format("{\"host\":\"127.0.0.1\",\"port\":6379,\"db\":%d,\"timeoutMillis\":2000}", db);
             conn.set("config:redis:followers:" + i, json);
         }
 
+        int[] listOutDbs = {11, 12, 13, 14};
         for (int i = 0; i < 16; i++) {
+            int db = listOutDbs[i % listOutDbs.length];
+            String json = String.format("{\"host\":\"127.0.0.1\",\"port\":6379,\"db\":%d,\"timeoutMillis\":2000}", db);
             conn.set("config:redis:list:out:" + i, json);
         }
 
@@ -185,24 +201,72 @@ public class Chapter10 {
 
         String pkey = "profile:" + otherUid;
         String hkey = "home:" + uid;
-        conn.del(pkey);
-        conn.del(hkey);
+
+        JedisPool profilePool = shardedTimelines.get(pkey);
+        JedisPool homePool = shardedTimelines.get(hkey);
+
+        Jedis pconn = null;
+        boolean okp = true;
+        try {
+            pconn = profilePool.getResource();
+            pconn.del(pkey);
+        } catch (Exception e) {
+            okp = false;
+            if (pconn != null) returnBrokenJedis(profilePool, pconn);
+            throw new RuntimeException(e);
+        } finally {
+            if (okp && pconn != null) returnJedis(profilePool, pconn);
+        }
+
+        Jedis hconn = null;
+        boolean okh = true;
+        try {
+            hconn = homePool.getResource();
+            hconn.del(hkey);
+        } catch (Exception e) {
+            okh = false;
+            if (hconn != null) returnBrokenJedis(homePool, hconn);
+            throw new RuntimeException(e);
+        } finally {
+            if (okh && hconn != null) returnJedis(homePool, hconn);
+        }
 
         double now = System.currentTimeMillis() / 1000.0;
-        conn.zadd(pkey, now - 10, "status:1");
-        conn.zadd(pkey, now - 5, "status:2");
+        pconn = null;
+        okp = true;
+        try {
+            pconn = profilePool.getResource();
+            pconn.zadd(pkey, now - 10, "status:1");
+            pconn.zadd(pkey, now - 5, "status:2");
+        } catch (Exception e) {
+            okp = false;
+            if (pconn != null) returnBrokenJedis(profilePool, pconn);
+            throw new RuntimeException(e);
+        } finally {
+            if (okp && pconn != null) returnJedis(profilePool, pconn);
+        }
 
         boolean ok = ch10.followUser(conn, uid, otherUid);
         System.out.println("followUser => " + ok);
         assert ok;
 
-        Set<Tuple> home = conn.zrevrangeWithScores(hkey, 0, -1);
-        System.out.println("home timeline => " + tuplesToElements(home));
-        assert home != null && home.size() >= 2;
-
-        List<String> elems = tuplesToElements(home);
-        assert elems.contains("status:1");
-        assert elems.contains("status:2");
+        hconn = null;
+        okh = true;
+        try {
+            hconn = homePool.getResource();
+            Set<Tuple> home = hconn.zrevrangeWithScores(hkey, 0, -1);
+            System.out.println("home timeline => " + tuplesToElements(home));
+            assert home != null && home.size() >= 2;
+            List<String> elems = tuplesToElements(home);
+            assert elems.contains("status:1");
+            assert elems.contains("status:2");
+        } catch (Exception e) {
+            okh = false;
+            if (hconn != null) returnBrokenJedis(homePool, hconn);
+            throw new RuntimeException(e);
+        } finally {
+            if (okh && hconn != null) returnJedis(homePool, hconn);
+        }
     }
 
     public void testDelayedTasks(Jedis conn, Chapter10 ch10) throws Exception {
