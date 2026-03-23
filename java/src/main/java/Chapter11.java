@@ -14,6 +14,7 @@ public class Chapter11 {
         new Chapter11().run();
     }
 
+    // Execute all test methods sequentially.
     public void run() throws Exception {
         Jedis conn = new Jedis("localhost");
         conn.select(15);
@@ -33,6 +34,7 @@ public class Chapter11 {
         System.out.println("\nALL Chapter 11 tests passed.");
     }
 
+    // Test the script loading mechanism.
     public void testScriptLoad(Jedis conn) {
         System.out.println("\n----- testScriptLoad -----");
         Chapter11.ScriptFn fn = Chapter11.scriptLoad("return 1");
@@ -53,6 +55,7 @@ public class Chapter11 {
         System.out.println("scriptLoad() OK.");
     }
 
+    // Test creating a status message with Lua.
     public void testCreateStatus(Jedis conn) {
         System.out.println("\n----- testCreateStatus -----");
 
@@ -90,6 +93,7 @@ public class Chapter11 {
         System.out.println("createStatus() OK.");
     }
 
+    // Test distributed lock using Lua.
     public void testDistributedLockingLua(Jedis conn) throws InterruptedException {
         System.out.println("\n----- testDistributedLockingLua -----");
 
@@ -128,6 +132,7 @@ public class Chapter11 {
         System.out.println("Lua lock OK.");
     }
 
+    // Test counting semaphore using Lua.
     public void testCountingSemaphoreLua(Jedis conn) throws InterruptedException {
         System.out.println("\n----- testCountingSemaphoreLua -----");
 
@@ -160,6 +165,7 @@ public class Chapter11 {
         System.out.println("Lua semaphore OK.");
     }
 
+    // Test autocomplete using Lua.
     public void testAutocompleteLua(Jedis conn) {
         System.out.println("\n----- testAutocompleteLua -----");
 
@@ -191,6 +197,7 @@ public class Chapter11 {
         System.out.println("Lua autocomplete OK.");
     }
 
+    // Test purchase item using Lua.
     public void testPurchaseItemLua(Jedis conn) {
         System.out.println("\n----- testPurchaseItemLua -----");
 
@@ -233,6 +240,7 @@ public class Chapter11 {
         System.out.println("Lua purchaseItem OK.");
     }
 
+    // Test sharded list push/pop operations.
     public void testShardedListPushPop(Jedis conn) {
         System.out.println("\n----- testShardedListPushPop -----");
 
@@ -290,6 +298,7 @@ public class Chapter11 {
         System.out.println("Sharded list push/pop OK.");
     }
 
+    // Test blocking pop on sharded lists.
     public void testShardedBlockingPop(final Jedis conn) throws Exception {
         System.out.println("\n----- testShardedBlockingPop -----");
 
@@ -360,7 +369,7 @@ public class Chapter11 {
         System.out.println("Sharded list blocking pop OK.");
     }
 
-
+    // Delete all keys with a given prefix.
     private void deleteByPrefix(Jedis conn, String prefix) {
         Set<String> keys = conn.keys(prefix + "*");
         if (keys != null && !keys.isEmpty()) {
@@ -368,6 +377,7 @@ public class Chapter11 {
         }
     }
 
+    // Return a function that loads and executes a Lua script.
     public static ScriptFn scriptLoad(String script) {
         AtomicReference<String> sha = new AtomicReference<String>(null);
         return new ScriptFn() {
@@ -409,14 +419,14 @@ public class Chapter11 {
         };
     }
 
+    // Interface for script-calling functions.
     public interface ScriptFn {
         Object call(Jedis conn, List<String> keys, List<String> args, boolean force_eval);
-
         Object call(Jedis conn, List<String> keys, List<String> args);
-
         Object call(Jedis conn);
     }
 
+    // Lua script for creating a status message.
     private static final ScriptFn createStatusLua = scriptLoad(
             "local login = redis.call('hget', KEYS[1], 'login')\n" +
                     "if not login then\n" +
@@ -433,6 +443,7 @@ public class Chapter11 {
                     "return id\n"
     );
 
+    // Create a status message using Lua script.
     public static Long createStatus(Jedis conn, String uid, String message, Map<String, String> data) {
         List<String> args = new ArrayList<String>();
         args.add("message");
@@ -459,10 +470,12 @@ public class Chapter11 {
         return Long.parseLong(String.valueOf(result));
     }
 
+    // Create a status message with only required fields.
     public static Long createStatus(Jedis conn, String uid, String message) {
         return createStatus(conn, uid, message, null);
     }
 
+    // Lua script for acquiring a lock with timeout.
     private static final ScriptFn acquireLockWithTimeoutLua = scriptLoad(
             "if redis.call('exists',KEYS[1]) == 0 then\n" +
                     "   return redis.call('setex',KEYS[1],unpack(ARGV))\n" +
@@ -470,6 +483,7 @@ public class Chapter11 {
                     "return nil\n"
     );
 
+    // Acquire a distributed lock using Lua script.
     public static String acquireLockWithTimeout(Jedis conn, String lockname, double acquireTimeout, double lockTimeout) {
         String identifier = UUID.randomUUID().toString();
         String lockKey = "lock:" + lockname;
@@ -493,10 +507,12 @@ public class Chapter11 {
         return acquired ? identifier : null;
     }
 
+    // Acquire a lock with default timeouts.
     public static String acquireLockWithTimeout(Jedis conn, String lockname) {
         return acquireLockWithTimeout(conn, lockname, 10, 10);
     }
 
+    // Lua script for releasing a lock.
     private static final ScriptFn releaseLockLua = scriptLoad(
             "if redis.call('get',KEYS[1]) == ARGV[1] then\n" +
                     "   return redis.call('del',KEYS[1])\n" +
@@ -504,6 +520,7 @@ public class Chapter11 {
                     "return false\n"
     );
 
+    // Release a distributed lock using Lua script.
     public static boolean releaseLock(Jedis conn, String lockname, String identifier) {
         String lockKey = "lock:" + lockname;
         Object response = releaseLockLua.call(conn,
@@ -527,6 +544,7 @@ public class Chapter11 {
         }
     }
 
+    // Lua script for acquiring a counting semaphore.
     private static final ScriptFn acquireSemaphoreLua = scriptLoad(
             "redis.call('zremrangebyscore',KEYS[1],'-inf',ARGV[1])\n" +
                     "if redis.call('zcard',KEYS[1]) < tonumber(ARGV[2]) then\n" +
@@ -536,6 +554,7 @@ public class Chapter11 {
                     "return nil\n"
     );
 
+    // Acquire a counting semaphore using Lua script.
     public static String acquireSemaphore(Jedis conn, String semname, long limit, double timeout) {
         double now = System.currentTimeMillis() / 1000.0;
         String identifier = UUID.randomUUID().toString();
@@ -550,10 +569,12 @@ public class Chapter11 {
         return (response == null) ? null : String.valueOf(response);
     }
 
+    // Acquire a semaphore with default timeout.
     public static String acquireSemaphore(Jedis conn, String semname, long limit) {
         return acquireSemaphore(conn, semname, limit, 10);
     }
 
+    // Lua script for refreshing a semaphore.
     private static final ScriptFn refreshSemaphoreLua = scriptLoad(
             "if redis.call('zscore',KEYS[1],ARGV[1]) then\n" +
                     "   return redis.call('zadd',KEYS[1],ARGV[2],ARGV[1]) or true\n" +
@@ -561,6 +582,7 @@ public class Chapter11 {
                     "return nil\n"
     );
 
+    // Refresh a semaphore's timestamp.
     public static boolean refreshSemaphore(Jedis conn, String semname, String identifier) {
         double now = System.currentTimeMillis() / 1000.0;
         Object response = refreshSemaphoreLua.call(
@@ -571,6 +593,7 @@ public class Chapter11 {
         return response != null;
     }
 
+    // Lua script for autocomplete on prefix.
     private static final ScriptFn autocompleteOnPrefixLua = scriptLoad(
             "redis.call('zadd',KEYS[1],0,ARGV[1],0,ARGV[2])\n" +
                     "local sindex = redis.call('zrank',KEYS[1],ARGV[1])\n" +
@@ -580,6 +603,7 @@ public class Chapter11 {
                     "return redis.call('zrange',KEYS[1],sindex,orange)\n"
     );
 
+    // Get autocomplete suggestions for a prefix.
     public static List<String> autocompleteOnPrefix(Jedis conn, String guild, String prefix) {
         String[] range = findPrefixRange(prefix);
         String start = range[0];
@@ -600,6 +624,7 @@ public class Chapter11 {
         return out;
     }
 
+    // Find the lexicographic range for a given prefix.
     public static String[] findPrefixRange(String prefix) {
         if (prefix == null || prefix.trim().length() == 0) {
             throw new IllegalArgumentException("prefix must not be empty");
@@ -616,6 +641,7 @@ public class Chapter11 {
         return new String[]{start, end};
     }
 
+    // Safely cast a script response to a list of strings.
     private static List<String> castStringList(Object response) {
         if (response == null) return Collections.emptyList();
         if (response instanceof List<?>) {
@@ -629,6 +655,7 @@ public class Chapter11 {
         return Collections.singletonList(response.toString());
     }
 
+    // Lua script for purchasing an item from market.
     private static final ScriptFn purchaseItemLua = scriptLoad(
             "local price = tonumber(redis.call('zscore',KEYS[1],ARGV[1]))\n" +
                     "if not price then\n" +
@@ -645,6 +672,7 @@ public class Chapter11 {
                     "return true\n"
     );
 
+    // Purchase an item using Lua script.
     public static boolean purchaseItem(Jedis conn, String buyerId, String itemId, String sellerId) {
         String buyer = "user:" + buyerId;
         String seller = "user:" + sellerId;
@@ -658,6 +686,7 @@ public class Chapter11 {
         return response != null;
     }
 
+    // Lua script for pushing to a sharded list.
     private static final ScriptFn shardedPushLua = scriptLoad(
             "local max = tonumber(redis.call('config','get','list-max-ziplist-entries')[2])\n" +
                     "if #ARGV < 2 or max < 2 then return 0 end\n" +
@@ -674,6 +703,7 @@ public class Chapter11 {
                     "end\n"
     );
 
+    // Helper to push items onto a sharded list.
     public static long shardedPushHelper(Jedis conn, String key, String cmd, String... items) {
         List<String> itemList = new ArrayList<String>();
         if (items != null) {
@@ -693,14 +723,17 @@ public class Chapter11 {
         return total;
     }
 
+    // Left push onto a sharded list.
     public static long shardedLpush(Jedis conn, String key, String... items) {
         return shardedPushHelper(conn, key, "lpush", items);
     }
 
+    // Right push onto a sharded list.
     public static long shardedRpush(Jedis conn, String key, String... items) {
         return shardedPushHelper(conn, key, "rpush", items);
     }
 
+    // Lua script for popping from a sharded list.
     private static final ScriptFn shardedListPopLua = scriptLoad(
             "local skey = ARGV[1] == 'lpop' and KEYS[2] or KEYS[3]\n" +
                     "local shard = redis.call('get', skey) or '0'\n" +
@@ -719,6 +752,7 @@ public class Chapter11 {
                     "return ret"
     );
 
+    // Left pop from a sharded list.
     public static String shardedLPop(Jedis conn, String key) {
         List<String> keys = Arrays.asList(key + ":", key + ":first", key + ":last");
         List<String> args = Collections.singletonList("lpop");
@@ -726,6 +760,7 @@ public class Chapter11 {
         return (response == null) ? null : String.valueOf(response);
     }
 
+    // Right pop from a sharded list.
     public static String shardedRPop(Jedis conn, String key) {
         List<String> keys = Arrays.asList(key + ":", key + ":first", key + ":last");
         List<String> args = Collections.singletonList("rpop");
@@ -733,14 +768,15 @@ public class Chapter11 {
         return (response == null) ? null : String.valueOf(response);
     }
 
+    // Lua script for assisting blocking pop on sharded lists.
     private static final ScriptFn shardedBpopHelperLua = scriptLoad(
-
             "local shard = redis.call('get', KEYS[2]) or '0'\n" +
                     "if shard ~= ARGV[1] then\n" +
                     "    redis.call(ARGV[2], KEYS[1], ARGV[3])\n" +
                     "end\n"
     );
 
+    // Helper for blocking pop from a sharded list.
     public static String shardedBpopHelper(Jedis conn, String key, int timeout, boolean isLeft) {
         int t = Math.max(timeout, 0);
         if (t == 0) t = 2 * 64;
@@ -775,10 +811,12 @@ public class Chapter11 {
         return null;
     }
 
+    // Blocking left pop from a sharded list.
     public static String shardedBlpop(Jedis conn, String key, int timeout) {
         return shardedBpopHelper(conn, key, timeout, true);
     }
 
+    // Blocking right pop from a sharded list.
     public static String shardedBrpop(Jedis conn, String key, int timeout) {
         return shardedBpopHelper(conn, key, timeout, false);
     }
