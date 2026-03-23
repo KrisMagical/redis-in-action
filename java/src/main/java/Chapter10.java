@@ -68,6 +68,7 @@ public class Chapter10 {
         new Chapter10().run();
     }
 
+    // Run all tests and seed configuration data.
     public void run() throws Exception {
         for (int db : new int[]{11, 12, 13, 14, 15}) {
             Jedis j = new Jedis("localhost");
@@ -94,6 +95,7 @@ public class Chapter10 {
         System.out.println("\nALL TESTS DONE.");
     }
 
+    // Seed Redis with configuration keys for different shards.
     private void seedRedisConfigs(Jedis conn) {
         System.out.println("\n----- seedRedisConfigs -----");
 
@@ -132,6 +134,7 @@ public class Chapter10 {
         System.out.println("seed done.");
     }
 
+    // Test countVisit by incrementing unique visitor count.
     public void testCountVisit(Jedis conn) {
         System.out.println("\n----- testCountVisit -----");
 
@@ -149,6 +152,7 @@ public class Chapter10 {
         assert v != null && Long.parseLong(v) >= 1L;
     }
 
+    // Test searchAndSort with different sort fields.
     public void testSearchAndSort(Jedis conn, Chapter10 ch10) {
         System.out.println("\n----- testSearchAndSort -----");
 
@@ -188,6 +192,7 @@ public class Chapter10 {
         assert "1".equals(r3.docids.get(2));
     }
 
+    // Test followUser by following a user and verifying home timeline.
     public void testFollowUser(Jedis conn, Chapter10 ch10) {
         System.out.println("\n----- testFollowUser -----");
 
@@ -269,6 +274,7 @@ public class Chapter10 {
         }
     }
 
+    // Test delayed task execution via executeLater and PollQueueThread.
     public void testDelayedTasks(Jedis conn, Chapter10 ch10) throws Exception {
         System.out.println("\n----- testDelayedTasks -----");
 
@@ -293,6 +299,7 @@ public class Chapter10 {
         t.join(1000);
     }
 
+    // Helper: convert tuple set to list of element strings.
     private List<String> tuplesToElements(Set<Tuple> tuples) {
         List<String> out = new ArrayList<String>();
         if (tuples == null) return out;
@@ -302,32 +309,37 @@ public class Chapter10 {
         return out;
     }
 
-
+    // Return a Jedis instance to the pool.
     private static void returnJedis(JedisPool pool, Jedis jedis) {
         if (pool != null && jedis != null) {
             pool.returnResource(jedis);
         }
     }
 
+    // Return a broken Jedis instance to the pool.
     private static void returnBrokenJedis(JedisPool pool, Jedis jedis) {
         if (pool != null && jedis != null) {
             pool.returnBrokenResource(jedis);
         }
     }
 
+    // Check object equality with null safety.
     private static boolean eq(Object a, Object b) {
         return a == b || (a != null && a.equals(b));
     }
 
+    // Get long from map with default.
     private static long getOrDefaultLong(Map<String, Long> map, String key, long def) {
         Long v = map.get(key);
         return v != null ? v.longValue() : def;
     }
 
+    // Set the global configuration connection pool.
     public static void setConfigConnection(JedisPool configConn) {
         configConnection = configConn;
     }
 
+    // Fetch configuration for a component, refreshing if older than wait seconds.
     public static Map<String, Object> getConfig(JedisPool conn, String type, String component, int wait) {
         String key = "config:" + type + ":" + component;
         long now = System.currentTimeMillis();
@@ -364,11 +376,13 @@ public class Chapter10 {
         return CONFIGS.get(key);
     }
 
+    // Parse JSON string into a Map.
     private static Map<String, Object> parseJsonToMap(String json) {
         Map<String, Object> map = (Map<String, Object>) GSON.fromJson(json, MAP_TYPE);
         return (map == null) ? Collections.<String, Object>emptyMap() : map;
     }
 
+    // Compute shard key for a given base and member.
     public static String shardKey(String base, String key, long totalElements, int shardSize) {
         long shardId;
         if (isDigit(key)) {
@@ -382,6 +396,7 @@ public class Chapter10 {
         return base + ":" + shardId;
     }
 
+    // Check if string contains only digits.
     public static boolean isDigit(String str) {
         if (str == null || str.length() == 0) return false;
         for (int i = 0; i < str.length(); i++) {
@@ -390,6 +405,7 @@ public class Chapter10 {
         return true;
     }
 
+    // Get Redis connection pool for a component.
     public static JedisPool getRedisConnection(String component, int wait) {
         String key = "config:redis:" + component;
         Map<String, Object> oldConfig = CONFIGS.get(key);
@@ -404,19 +420,23 @@ public class Chapter10 {
         return REDIS_CONNECTIONS.get(key);
     }
 
+    // Get sharded Redis connection for a component based on key.
     public static JedisPool getShardedConnection(String component, String key, long shardCount, int wait) {
         String shard = shardKey(component, "x" + String.valueOf(key), shardCount, 2);
         return getRedisConnection(shard, wait);
     }
 
+    // Functional interface for sharded operations.
     public interface ShardedFunction<T> {
         T call(JedisPool conn, String key, Object... args);
     }
 
+    // Interface for callers that need sharding.
     public interface ShardedCaller<T> {
         T call(String key, Object... args);
     }
 
+    // Create a sharded caller that resolves connection per key.
     public static <T> ShardedCaller<T> shardedConnection(
             final String component,
             final long shardCount,
@@ -431,6 +451,7 @@ public class Chapter10 {
         };
     }
 
+    // Get expected cardinality for unique set.
     public static long getExpected(Jedis conn, String key, Calendar today) {
         if (!EXPECTED.containsKey(key)) {
             String exkey = key + ":expected";
@@ -458,6 +479,7 @@ public class Chapter10 {
         return v != null ? v.longValue() : 0L;
     }
 
+    // Get expected value along with the connection pool.
     public static Pair<JedisPool, Long> getExpected(String key, Calendar today) {
         JedisPool pool = getRedisConnection("unique", 1);
         Jedis jedis = null;
@@ -475,6 +497,7 @@ public class Chapter10 {
         }
     }
 
+    // Sharded caller for counting unique visits.
     public static final ShardedCaller<Void> COUNT_VISIT =
             shardedConnection("unique", 16, 1, new ShardedFunction<Void>() {
                 public Void call(JedisPool pool, String sessionId, Object... args) {
@@ -519,20 +542,24 @@ public class Chapter10 {
                 }
             });
 
+    // Record a unique visit.
     public static void countVisit(String sessionId) {
         COUNT_VISIT.call(sessionId, new Object[0]);
     }
 
+    // Add member to a sharded set.
     public static Long shardSadd(Jedis conn, String base, long member, long totalElements, int shardSize) {
         String shard = shardKey(base, "x" + String.valueOf(member), totalElements, shardSize);
         return conn.sadd(shard, String.valueOf(member));
     }
 
+    // Query parsing result holder.
     public static final class Query {
         public final List<List<String>> all = new ArrayList<List<String>>();
         public final Set<String> unwanted = new HashSet<String>();
     }
 
+    // Helper for set operations with TTL.
     private String setCommon(Transaction trans, String method, int ttl, String... items) {
         String[] keys = new String[items.length];
         for (int i = 0; i < items.length; i++) {
@@ -551,18 +578,22 @@ public class Chapter10 {
         return id;
     }
 
+    // Perform set intersection and store with TTL.
     public String intersect(Transaction trans, int ttl, String... items) {
         return setCommon(trans, "sinterstore", ttl, items);
     }
 
+    // Perform set union and store with TTL.
     public String union(Transaction trans, int ttl, String... items) {
         return setCommon(trans, "sunionstore", ttl, items);
     }
 
+    // Perform set difference and store with TTL.
     public String difference(Transaction trans, int ttl, String... items) {
         return setCommon(trans, "sdiffstore", ttl, items);
     }
 
+    // Parse search query into required and unwanted words.
     public Query parse(String queryStringString) {
         Query queryString = new Query();
         Set<String> current = new HashSet<String>();
@@ -598,6 +629,7 @@ public class Chapter10 {
         return queryString;
     }
 
+    // Parse query and store result set with TTL.
     public String parseAndSearch(Jedis conn, String queryStringString, int ttl) {
         Query queryString = parse(queryStringString);
         if (queryString.all.isEmpty()) return null;
@@ -633,10 +665,12 @@ public class Chapter10 {
         return intersectResult;
     }
 
+    // Search and sort with default parameters.
     public SearchResult searchAndSort(Jedis conn, String queryStringString, String sort) {
         return searchAndSort(conn, queryStringString, null, 300, sort, 0, 20);
     }
 
+    // Search and sort with full parameters.
     public SearchResult searchAndSort(Jedis conn, String queryStringString, String id, int ttl, String sort, int start, int num) {
         boolean desc = sort.startsWith("-");
         if (desc) sort = sort.substring(1);
@@ -671,6 +705,7 @@ public class Chapter10 {
         return new SearchResult(rid, count, docids);
     }
 
+    // Search, sort, and fetch additional field values.
     public SearchGetValuesResult searchGetValues(Jedis conn, String queryString, String id, int ttl, String sort, int start, int num) {
         SearchResult searchResult = searchAndSort(conn, queryString, id, ttl, sort, 0, start + num);
         String keyPattern = "kb:doc:%s";
@@ -694,6 +729,7 @@ public class Chapter10 {
         return new SearchGetValuesResult(searchResult.count, dataPairs, searchResult.id);
     }
 
+    // Fetch search results from all shards.
     public ShardResults getShardResults(String component, int shards, String queryString, List<String> ids, int ttl, String sort, int start, int num, int wait) {
         long count = 0;
         List<Pair<String, String>> data = new ArrayList<Pair<String, String>>();
@@ -724,6 +760,7 @@ public class Chapter10 {
         return new ShardResults(count, data, ids);
     }
 
+    // Convert pair to numeric key for sorting.
     private static BigDecimal toNumericKey(Pair<String, String> data) {
         try {
             String s = data.getValue1();
@@ -734,11 +771,13 @@ public class Chapter10 {
         }
     }
 
+    // Convert pair to string key for sorting.
     private static String toStringKey(Pair<String, String> data) {
         String s = data.getValue1();
         return (s == null) ? "" : s;
     }
 
+    // Merge sorted shard results into a single sorted list.
     public SearchShardsResult searchShards(String component, int shards, String queryString, List<String> ids, int ttl, String sort, int start, int num, int wait) {
         ShardResults shardResults = getShardResults(component, shards, queryString, ids, ttl, sort, start, num, wait);
 
@@ -774,6 +813,7 @@ public class Chapter10 {
         return new SearchShardsResult(shardResults.count, results, shardResults.ids);
     }
 
+    // Helper for ZSET store operations.
     private String zsetCommon(Transaction trans, String method, int ttl, ZParams params, String... sets) {
         String[] keys = new String[sets.length];
         for (int i = 0; i < sets.length; i++) {
@@ -792,14 +832,17 @@ public class Chapter10 {
         return id;
     }
 
+    // ZINTERSTORE with TTL.
     public String zintersect(Transaction trans, int ttl, ZParams params, String... sets) {
         return zsetCommon(trans, "zinterstore", ttl, params, sets);
     }
 
+    // ZUNIONSTORE with TTL.
     public String zunion(Transaction trans, int ttl, ZParams params, String... sets) {
         return zsetCommon(trans, "zunionstore", ttl, params, sets);
     }
 
+    // Search and ZSET sort with weights.
     @SuppressWarnings("unchecked")
     public SearchResult searchAndZsort(Jedis conn, String queryStringString, boolean desc, Map<String, Integer> weights) {
         int ttl = 300;
@@ -835,6 +878,7 @@ public class Chapter10 {
                 new ArrayList<String>((Set<String>) results.get(results.size() - 1)));
     }
 
+    // Search and ZSET sort with explicit parameters.
     public SearchResult searchAndZsort(Jedis conn, String queryStringString, String id, int ttl, int update, int vote, int start, int num, boolean desc) {
         String baseId = (id != null) ? id : parseAndSearch(conn, queryStringString, ttl);
         if (baseId == null) {
@@ -865,6 +909,7 @@ public class Chapter10 {
         return new SearchResult(zsetId, count, new ArrayList<String>(docidSet));
     }
 
+    // Search and retrieve values with scores.
     public SearchZsetValuesResult searchGetZsetValues(Jedis conn, String query, String id, int ttl, int update, int vote, int start, int num, boolean desc) {
         SearchResult sr = searchAndZsort(conn, query, id, ttl, update, vote, 0, 1, desc);
 
@@ -880,6 +925,7 @@ public class Chapter10 {
         return new SearchZsetValuesResult(sr.count, data, sr.id);
     }
 
+    // Search across shards using ZSETs.
     public SearchShardsZsetResult searchShardsZset(String component, int shards, String query, List<String> ids, int ttl, int update, int vote, int start, int num, boolean desc, int wait) {
         long count = 0;
         List<Tuple> data = new ArrayList<Tuple>();
@@ -928,9 +974,11 @@ public class Chapter10 {
         return new SearchShardsZsetResult(count, results, ids);
     }
 
+    // Sharded connection for timelines.
     private static final KeyShardedConnection shardedTimelines =
             new KeyShardedConnection("timelines", SHARDED_TIMELINES_SHARDS, 1);
 
+    // Follow a user and update home timeline with profile posts.
     public boolean followUser(Jedis conn, long uid, long otherUid) {
         String fkey1 = "following:" + uid;
         String fkey2 = "followers:" + otherUid;
@@ -998,9 +1046,11 @@ public class Chapter10 {
         return true;
     }
 
+    // Alternative sharded follower implementation.
     private static final KeyDataShardedConnection shardedFollowers =
             new KeyDataShardedConnection("followers", SHARDED_FOLLOWERS_SHARDS, 1);
 
+    // Follow user using sharded connections for followers/following.
     public boolean followUser_2(Jedis conn, long uid, long otherUid) {
         String fkey1 = "following:" + uid;
         String fkey2 = "followers:" + otherUid;
@@ -1081,6 +1131,7 @@ public class Chapter10 {
         return true;
     }
 
+    // Retrieve elements from sharded ZSETs by score range.
     public List<Tuple> shardedZrangeByScore(String component, int shards, String key, double min, String max, int num, int wait) {
         List<Tuple> data = new ArrayList<Tuple>();
 
@@ -1116,6 +1167,7 @@ public class Chapter10 {
         return data;
     }
 
+    // Syndicate a status to followers' home timelines.
     public void syndicateStatus(long uid, Map<String, Double> post, double start, boolean onLists) {
 
         String root = "followers";
@@ -1211,6 +1263,7 @@ public class Chapter10 {
         }
     }
 
+    // Create JedisPool from configuration map.
     private static JedisPool createJedisPoolFromConfig(Map<String, Object> config) {
         String host = asString(config.get("host"), "127.0.0.1");
         int port = asInt(config.get("port"), 6379);
@@ -1225,11 +1278,13 @@ public class Chapter10 {
         return new JedisPool(poolConfig, host, port, timeoutMillis, null, db);
     }
 
+    // Convert object to string with default.
     private static String asString(Object value, String def) {
         if (value == null) return def;
         return String.valueOf(value);
     }
 
+    // Convert object to int with default.
     private static int asInt(Object value, int def) {
         if (value == null) return def;
         if (value instanceof Integer) return ((Integer) value).intValue();
@@ -1242,6 +1297,7 @@ public class Chapter10 {
         }
     }
 
+    // Schedule a task to run later or immediately.
     public String executeLater(Jedis conn, String queue, String name, List<String> args, long delay) {
         Gson gson = new Gson();
         String identifier = UUID.randomUUID().toString();
@@ -1255,10 +1311,12 @@ public class Chapter10 {
         return identifier;
     }
 
+    // Acquire a lock with default timeout.
     public String acquireLock(Jedis conn, String lockName) {
         return acquireLock(conn, lockName, 10000);
     }
 
+    // Acquire a lock with specified timeout.
     public String acquireLock(Jedis conn, String lockName, long acquireTimeout) {
         String identifier = UUID.randomUUID().toString();
 
@@ -1276,6 +1334,7 @@ public class Chapter10 {
         return null;
     }
 
+    // Release a previously acquired lock.
     public boolean releaseLock(Jedis conn, String lockName, String identifier) {
         String lockKey = "lock:" + lockName;
 
@@ -1296,6 +1355,7 @@ public class Chapter10 {
         return false;
     }
 
+    // Helper class for sharded connections keyed by a single key.
     public static final class KeyShardedConnection {
         private final String component;
         private final int shards;
@@ -1311,11 +1371,13 @@ public class Chapter10 {
             this.wait = wait;
         }
 
+        // Get connection pool for a given key.
         public JedisPool get(String key) {
             return getShardedConnection(component, key, shards, wait);
         }
     }
 
+    // Helper class for sharded connections keyed by a pair of IDs.
     public static final class KeyDataShardedConnection {
         private final String component;
         private final int shards;
@@ -1331,6 +1393,7 @@ public class Chapter10 {
             this.wait = wait;
         }
 
+        // Get connection pool for a pair of IDs, ordering them.
         public JedisPool get(long id1, long id2) {
             if (id2 < id1) {
                 long tmp = id1;
@@ -1342,6 +1405,7 @@ public class Chapter10 {
         }
     }
 
+    // Thread that polls delayed tasks and moves them to queues.
     public class PollQueueThread extends Thread {
         private Jedis conn;
         private boolean quit;
@@ -1389,6 +1453,7 @@ public class Chapter10 {
         }
     }
 
+    // Result holder for search operations.
     public static final class SearchResult {
         public final String id;
         public final long count;
@@ -1401,6 +1466,7 @@ public class Chapter10 {
         }
     }
 
+    // Result holder for search with additional field values.
     public static final class SearchGetValuesResult {
         public final long count;
         public final List<Pair<String, String>> dataPairs;
@@ -1413,6 +1479,7 @@ public class Chapter10 {
         }
     }
 
+    // Intermediate result for shard queries.
     public static final class ShardResults {
         public final long count;
         public final List<Pair<String, String>> data;
@@ -1425,6 +1492,7 @@ public class Chapter10 {
         }
     }
 
+    // Final result for sharded search with sorting.
     public static final class SearchShardsResult {
         public final long count;
         public final List<String> results;
@@ -1437,6 +1505,7 @@ public class Chapter10 {
         }
     }
 
+    // Result holder for ZSET search with values.
     public static final class SearchZsetValuesResult {
         public final long count;
         public final Set<Tuple> data;
@@ -1449,6 +1518,7 @@ public class Chapter10 {
         }
     }
 
+    // Final result for sharded ZSET search.
     public static final class SearchShardsZsetResult {
         public final long count;
         public final List<String> results;
